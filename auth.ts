@@ -5,8 +5,11 @@ import {PrismaAdapter} from "@auth/prisma-adapter"
  import { getUserById } from "./data/user"
 import { UserRole } from "@prisma/client"
 import { getTwoFactorConfirmationByUserId } from "./data/two-factor-confirmation"
+import { getAccountByUserId } from "./data/account"
  export type ExtendedUser=DefaultSession["user"] &{
     role:"ADMIN"|"USER"
+    isTwoFactorEnabled:boolean
+    isOAuth:boolean
  }
 
  declare module "next-auth"{
@@ -54,10 +57,10 @@ export const {
                         id:twoFactorConfirmation.id
                     }
                 })
-            
+            }
 
             return true
-        }},
+    },
 
         async session({token,session}){
            if(token.sub&&session.user){
@@ -65,15 +68,32 @@ export const {
            }
            if(token.role&& session.user){
             session.user.role=token.role as UserRole;
+           
+           }
+
+
+           if(session.user){
+            session.user.isTwoFactorEnabled=token.isTwoFactorEnabled as boolean;
+            session.user.name=token.name;
+            session.user.email=token.email as string;
+            session.user.isOAuth=token.isOAuth as boolean;
            }
            return session;
         },
         async jwt({token}){
+
+            console.log("Im being called again")
             if(!token.sub) return token
         const existingUser=await getUserById(token.sub);
         if(!existingUser) return token;
 
+        const existingAccount=await getAccountByUserId(existingUser.id);
+
+        token.isOAuth=!!existingAccount;
+        token.name=existingUser.name;
+        token.email=existingUser.email;
         token.role=existingUser.role;
+        token.isTwoFactorEnabled=existingUser.isTwoFactorEnabled
 
         return token
         
